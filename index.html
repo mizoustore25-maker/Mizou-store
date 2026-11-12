@@ -1,0 +1,218 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mizou Store</title>
+<style>
+body{margin:0;background:#111;color:#fff;font-family:Arial,sans-serif}
+header{text-align:center;padding:25px;background:#1b1b1b;border-bottom:1px solid #b99b59}
+h1{color:#d6b56d;margin:0}
+.hero{text-align:center;padding:35px 15px}
+.hero h2{font-size:27px}
+.gold{color:#d6b56d}
+.products{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px;padding:15px;max-width:1000px;margin:auto}
+.card,.panel{background:#202020;border:1px solid #444;border-radius:12px;padding:14px}
+.card img{width:100%;height:230px;object-fit:cover;border-radius:8px}
+.price{color:#d6b56d;font-size:22px;font-weight:bold}
+button,a.btn{display:block;background:#d6b56d;color:#111;border:0;border-radius:8px;padding:12px;text-align:center;text-decoration:none;font-weight:bold;margin-top:10px;cursor:pointer}
+input,textarea{width:100%;box-sizing:border-box;padding:12px;margin:6px 0;background:#111;color:white;border:1px solid #555;border-radius:7px}
+#admin{display:none;max-width:650px;margin:25px auto;padding:15px}
+.item{padding:12px;border-bottom:1px solid #555}
+.small{color:#aaa;font-size:13px}
+footer{text-align:center;padding:25px;color:#888}
+</style>
+</head>
+<body>
+
+<header>
+<h1>Mizou Store</h1>
+<p>أناقة الرجل تبدأ من التفاصيل</p>
+</header>
+
+<section class="hero">
+<h2>اختار ساعتك <span class="gold">بأناقة</span></h2>
+<p>ساعات رجالية أنيقة بسعر مناسب</p>
+<p class="gold">⌚ 1490 دج | 🎁 خاتم هدية مجانية</p>
+</section>
+
+<h2 style="text-align:center">تشكيلة الساعات</h2>
+<div id="products" class="products">جاري التحميل...</div>
+
+<section id="admin">
+<div class="panel">
+<h2 class="gold">لوحة تحكم Mizou Store</h2>
+
+<div id="login">
+<p>دخول صاحب المتجر</p>
+<input id="email" type="email" placeholder="البريد الإلكتروني">
+<input id="password" type="password" placeholder="كلمة المرور">
+<button id="loginBtn">دخول</button>
+</div>
+
+<div id="management" style="display:none">
+<h3>إضافة ساعة جديدة</h3>
+<input id="name" placeholder="اسم الساعة">
+<input id="price" type="number" value="1490" placeholder="السعر">
+<textarea id="description" placeholder="وصف الساعة"></textarea>
+<label>صورة الساعة من معرض الهاتف</label>
+<input id="photo" type="file" accept="image/*">
+<button id="save">حفظ الساعة</button>
+<button id="logout">تسجيل الخروج</button>
+<p id="message" class="small"></p>
+<h3>المنتجات</h3>
+<div id="manageList"></div>
+</div>
+</div>
+</section>
+
+<footer>
+<p>© Mizou Store</p>
+<a href="#admin" id="adminLink" style="color:#888">دخول الإدارة</a>
+</footer>
+
+<script type="module">
+import {createClient} from 'https://esm.sh/@supabase/supabase-js@2';
+
+const db=createClient(
+'https://kvimwxvmnchdohthbqpu.supabase.co',
+'sb_publishable_dnzK305wOgEs_0jfn4oW7g_bHT9xXtM'
+);
+
+const whatsapp='213562643967';
+let editId=null;
+let oldImage=null;
+
+function safe(s=''){
+return String(s).replace(/[&<>"']/g,c=>({
+'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+}[c]));
+}
+
+async function showProducts(){
+const box=document.getElementById('products');
+const {data,error}=await db.from('products')
+.select('*').eq('active',true).order('created_at',{ascending:false});
+
+if(error){box.textContent='تعذر تحميل الساعات';return;}
+if(!data.length){box.textContent='قريباً... ساعاتنا الجديدة تتحضر';return;}
+
+box.innerHTML=data.map(p=>`
+<div class="card">
+<img src="${safe(p.image_url||'')}" alt="${safe(p.name)}">
+<h3>${safe(p.name)}</h3>
+<p>${safe(p.description||'')}</p>
+<p class="price">${p.price} دج</p>
+<p class="gold">🎁 خاتم هدية مجانية</p>
+<a class="btn" target="_blank" href="https://wa.me/${whatsapp}?text=${encodeURIComponent('السلام عليكم، حاب نطلب '+p.name+' بسعر '+p.price+' دج مع الخاتم هدية')}">اطلب عبر واتساب</a>
+</div>`).join('');
+}
+
+async function sessionCheck(){
+const {data:{session}}=await db.auth.getSession();
+document.getElementById('login').style.display=session?'none':'block';
+document.getElementById('management').style.display=session?'block':'none';
+if(session) await showAdminProducts();
+}
+
+async function showAdminProducts(){
+const {data,error}=await db.from('products').select('*').order('created_at',{ascending:false});
+const box=document.getElementById('manageList');
+if(error){box.textContent=error.message;return;}
+box.innerHTML=data.map(p=>`
+<div class="item">
+<b>${safe(p.name)}</b> - ${p.price} دج
+<button data-edit="${p.id}">تعديل</button>
+<button data-delete="${p.id}" style="background:#8c3333;color:white">حذف</button>
+</div>`).join('');
+}
+
+document.getElementById('adminLink').onclick=()=>{
+document.getElementById('admin').style.display='block';
+};
+
+document.getElementById('loginBtn').onclick=async()=>{
+const {error}=await db.auth.signInWithPassword({
+email:document.getElementById('email').value,
+password:document.getElementById('password').value
+});
+document.getElementById('message').textContent=error?error.message:'تم الدخول';
+if(!error) await sessionCheck();
+};
+
+document.getElementById('logout').onclick=async()=>{
+await db.auth.signOut();
+await sessionCheck();
+};
+
+document.getElementById('save').onclick=async()=>{
+const name=document.getElementById('name').value.trim();
+const price=Number(document.getElementById('price').value);
+const description=document.getElementById('description').value;
+const file=document.getElementById('photo').files[0];
+const msg=document.getElementById('message');
+
+if(!name||!price){msg.textContent='اكتب اسم الساعة والسعر';return;}
+
+msg.textContent='جاري الحفظ...';
+try{
+let image_url=oldImage;
+
+if(file){
+if(!file.type.startsWith('image/'))throw Error('اختار صورة فقط');
+const ext=file.name.split('.').pop().replace(/[^a-z0-9]/gi,'')||'jpg';
+const path=crypto.randomUUID()+'.'+ext;
+const {error}=await db.storage.from('product-images').upload(path,file);
+if(error)throw error;
+image_url=db.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+}
+
+if(!image_url)throw Error('اختار صورة الساعة');
+
+const product={name,price,description,image_url,active:true};
+const result=editId
+?await db.from('products').update(product).eq('id',editId)
+:await db.from('products').insert(product);
+
+if(result.error)throw result.error;
+
+msg.textContent='تم حفظ الساعة بنجاح';
+editId=null;oldImage=null;
+document.getElementById('name').value='';
+document.getElementById('price').value=1490;
+document.getElementById('description').value='';
+document.getElementById('photo').value='';
+document.getElementById('save').textContent='حفظ الساعة';
+await showProducts();
+await showAdminProducts();
+}catch(e){msg.textContent='خطأ: '+e.message;}
+};
+
+document.getElementById('manageList').onclick=async e=>{
+const edit=e.target.dataset.edit;
+const del=e.target.dataset.delete;
+
+if(edit){
+const {data,error}=await db.from('products').select('*').eq('id',edit).single();
+if(error)return;
+editId=data.id;oldImage=data.image_url;
+document.getElementById('name').value=data.name;
+document.getElementById('price').value=data.price;
+document.getElementById('description').value=data.description||'';
+document.getElementById('save').textContent='حفظ التعديلات';
+}
+
+if(del&&confirm('هل تريد حذف الساعة؟')){
+const {error}=await db.from('products').delete().eq('id',del);
+document.getElementById('message').textContent=error?error.message:'تم الحذف';
+await showProducts();
+await showAdminProducts();
+}
+};
+
+await showProducts();
+await sessionCheck();
+</script>
+</body>
+</html>
